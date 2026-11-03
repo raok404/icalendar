@@ -18,6 +18,7 @@ from icalendar.cal import (
     TimezoneStandard,
     Todo,
 )
+from icalendar.cal.calendar import parse
 from icalendar.enums import (
     BUSYTYPE,
     CLASS,
@@ -150,6 +151,7 @@ __all__ = [
     "__version__",
     "__version_tuple__",
     "is_utc",
+    "parse",
     "q_join",
     "q_split",
     "use_pytz",
