@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Literal, cast, overload
+from io import BufferedIOBase
+from pathlib import Path
+from typing import TYPE_CHECKING, BinaryIO, Literal, cast, overload
 
 from icalendar.attr import (
     CONCEPTS_TYPE_SETTER,
@@ -28,7 +30,6 @@ from icalendar.version import __version__
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from datetime import date, datetime
-    from pathlib import Path
 
     from icalendar.cal import (
         Availability,
@@ -684,4 +685,74 @@ Example:
             )
 
 
-__all__ = ["Calendar"]
+@overload
+def parse(
+    source: bytes | Path | BinaryIO, multiple: Literal[False] = False
+) -> Calendar: ...
+
+
+@overload
+def parse(
+    source: bytes | Path | BinaryIO, multiple: Literal[True]
+) -> list[Calendar]: ...
+
+
+def parse(
+    source: bytes | Path | BinaryIO, multiple: bool = False
+) -> Calendar | list[Calendar]:
+    """
+    Convenience method to parse objects into a list of icalendar.Calendar objects.
+    If multiple=False, it returns only one calendar.
+
+
+    Args:
+        source (bytes | Path | BinaryIO): The source of the calendar data.
+        multiple (bool): Whether to parse multiple calendars.
+
+    Returns:
+        Calendar | list[Calendar]: One calendar or a list of parsed calendar objects.
+
+    Raises:
+        TypeError: If the source is not bytes, Path, or BinaryIO.
+        ValueError: If the format of the calendar data cannot be determined.
+        OSError: If the source is a Path and cannot be read.
+    """
+
+    if isinstance(source, Path):
+        try:
+            source_bytes = source.read_bytes()
+        except OSError:
+            raise OSError("Could not open the source file.") from None
+    elif isinstance(source, bytes):
+        source_bytes = source
+    elif isinstance(source, BufferedIOBase):
+        source_bytes = source.read()
+    else:
+        raise TypeError("Expected source to be a file path, bytes, or file with bytes.")
+
+    bytes_first_char = source_bytes.lstrip()[0:1]
+    if bytes_first_char == b"[":
+        result = Calendar.from_jcal(source_bytes.decode("utf-8"))
+        if not isinstance(result, Calendar):
+            raise ValueError("Failed to parse calendar from jCal format.")
+        if not multiple:
+            return result
+        return [result]
+
+    if bytes_first_char == b"<":
+        result = Calendar.from_xcal(source_bytes)
+        if multiple:
+            return result
+        if len(result) == 1 and not multiple:
+            return result[0]
+        raise ValueError(
+            "The 'multiple' parameter does not match the number of calendars parsed."
+        )
+
+    if bytes_first_char == b"B":
+        return Calendar.from_ical(source_bytes, multiple=multiple)
+
+    raise ValueError("Could not determine the format of the calendar data.")
+
+
+__all__ = ["Calendar", "parse"]
